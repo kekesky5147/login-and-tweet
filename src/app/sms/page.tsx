@@ -1,29 +1,75 @@
-import FormButton from '@/src/components/form-btn'
-import FormInput from '@/src/components/form-input'
+'use client'
 
-export default function SMSLogin () {
+import { useState, useEffect } from 'react'
+import { logout } from '../actions'
+import Input from '@/src/components/input'
+import Button from '@/src/components/button'
+
+export default function SMSLoginPage () {
+  const [phone, setPhone] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [userId, setUserId] = useState<number | null>(null)
+
+  useEffect(() => {
+    const fetchSession = async () => {
+      try {
+        const response = await fetch('/api/session')
+        if (response.ok) {
+          const session = await response.json()
+          setUserId(session?.userId || null)
+          console.log('Session userId:', session?.userId) // Debug log
+        }
+      } catch {
+        setUserId(null)
+      }
+    }
+    fetchSession()
+  }, [])
+
+  const handleSubmit = async (formData: FormData) => {
+    try {
+      const response = await fetch('/api/sms-login', {
+        method: 'POST',
+        body: formData
+      })
+      if (!response.ok) {
+        setError('Login failed. Please try again.')
+        return
+      }
+      window.location.href = '/profile'
+    } catch {
+      setError('Server error. Please try again.')
+    }
+  }
+
   return (
-    <div className='flex flex-col gap-10 py-8 px-6'>
-      <div className='flex flex-col gap-2 *:font-medium'>
-        <h1 className='text-2xl'>SMS Log in</h1>
-        <h2 className='text-xl'>Verify your phone number.</h2>
-      </div>
-      <form className='flex flex-col gap-3'>
-        <FormInput
-          name='number'
-          type='number'
-          placeholder='Phone number'
+    <div className='min-h-screen bg-neutral-100 p-4'>
+      {userId && (
+        <form action={logout} className='fixed top-4 right-4'>
+          <button
+            type='submit'
+            className='bg-red-500 text-white text-sm px-3 py-1 rounded hover:bg-red-600'
+          >
+            Logout
+          </button>
+        </form>
+      )}
+      <h1 className='text-2xl font-bold'>SMS Login</h1>
+      <form
+        action={handleSubmit}
+        className='mt-4 flex flex-col gap-3 max-w-lg mx-auto'
+      >
+        <Input
+          name='phone'
+          type='text'
+          placeholder='Enter your phone number (e.g., 01012345678)'
           required
-          errors={[]}
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
+          className='w-full h-12 text-lg p-3'
         />
-        <FormInput
-          name='number'
-          type='number'
-          placeholder='Verification code'
-          required
-          errors={[]}
-        />
-        <FormButton text='Verify' />
+        {error && <p className='text-red-500'>{error}</p>}
+        <Button text='Login' />
       </form>
     </div>
   )

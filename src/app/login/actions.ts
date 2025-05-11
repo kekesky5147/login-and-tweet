@@ -1,21 +1,32 @@
 "use server"
+
+import {
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_REGEX,
+  PASSWORD_REGEX_ERROR,
+} from "@/src/lib/constants"
 import { z } from "zod"
 
-const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+const formSchema = z.object({
+  email: z.string().email().toLowerCase(),
+  password: z
+    .string({
+      required_error: "Password is required",
+    })
+    .min(PASSWORD_MIN_LENGTH)
+    .regex(PASSWORD_REGEX, PASSWORD_REGEX_ERROR),
 })
 
 export type ActionState = {
-  error?: string
-  success?: boolean
   fieldErrors?: {
     email?: string[]
     password?: string[]
   }
+  error?: string
+  success?: boolean
 } | null
 
-export async function login(
+export async function logIn(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
@@ -24,16 +35,15 @@ export async function login(
     password: formData.get("password"),
   }
 
-  const result = loginSchema.safeParse(data)
+  const result = formSchema.safeParse(data)
   if (!result.success) {
+    console.log(result.error.flatten())
     return {
-      error: "Invalid login credentials",
+      error: "다시 확인해주세요",
       fieldErrors: result.error.flatten().fieldErrors,
     }
+  } else {
+    console.log(result.data)
+    return { success: true }
   }
-
-  const validatedData = result.data
-  // 로그인 로직 (예: 데이터베이스 인증)
-  console.log(validatedData)
-  return { success: true }
 }
