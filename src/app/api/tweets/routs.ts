@@ -6,7 +6,7 @@ export async function GET() {
   noStore()
   try {
     const tweets = await prisma.tweet.findMany({
-      include: { user: { select: { nickname: true } } },
+      include: { user: { select: { username: true } } },
       orderBy: { createdAt: "desc" },
     })
     return NextResponse.json(tweets)
