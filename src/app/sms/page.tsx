@@ -1,22 +1,28 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { logout } from '../actions'
+import { useFormState } from 'react-dom'
+import { smsLogin, logout } from '../actions'
 import Input from '@/src/components/input'
 import Button from '@/src/components/button'
 
 interface LoginResult {
   message: string
+  userId?: number
   success?: boolean
   errors?: {
+    phone?: string[]
     server?: string[]
   }
 }
 
 export default function SMSLoginPage () {
   const [phone, setPhone] = useState('')
-  const [error, setError] = useState<string | null>(null)
   const [userId, setUserId] = useState<number | null>(null)
+  const [state, formAction] = useFormState(smsLogin, {
+    message: '',
+    success: false
+  })
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -34,44 +40,39 @@ export default function SMSLoginPage () {
     fetchSession()
   }, [])
 
-  const handleSubmit = async (formData: FormData): Promise<void> => {
-    try {
-      const response = await fetch('/api/sms-login', {
-        method: 'POST',
-        body: formData
-      })
-      const data: LoginResult = await response.json() // API 응답 파싱
-      if (!response.ok || !data.success) {
-        setError(data.message || 'Login failed. Please try again.')
-        return
-      }
+  useEffect(() => {
+    if (state.success) {
       window.location.href = '/profile'
-    } catch {
-      setError('Server error. Please try again.')
     }
-  }
+  }, [state.success])
 
-  const onSubmit: React.FormEventHandler<HTMLFormElement> = async event => {
-    event.preventDefault() // 기본 폼 제출 동작 방지
-    const formData = new FormData(event.currentTarget)
-    await handleSubmit(formData)
+  const handleLogout = async () => {
+    const result = await logout()
+    if (result.success) {
+      setUserId(null) // 클라이언트 상태 업데이트
+      window.location.href = '/login' // 로그아웃 후 리디렉션
+    } else {
+      console.error('Logout failed:', result.message)
+    }
   }
 
   return (
     <div className='min-h-screen bg-neutral-100 p-4'>
       {userId && (
-        <form action={logout} className='fixed top-4 right-4'>
+        <div className='fixed top-4 right-4'>
           <button
-            type='submit'
+            type='button'
+            onClick={handleLogout}
             className='bg-red-500 text-white text-sm px-3 py-1 rounded hover:bg-red-600'
           >
             Logout
           </button>
-        </form>
+        </div>
       )}
       <h1 className='text-2xl font-bold'>SMS Login</h1>
+      )T
       <form
-        onSubmit={onSubmit}
+        action={formAction}
         className='mt-4 flex flex-col gap-3 max-w-lg mx-auto'
       >
         <Input
@@ -83,7 +84,9 @@ export default function SMSLoginPage () {
           onChange={e => setPhone(e.target.value)}
           className='w-full h-12 text-lg p-3'
         />
-        {error && <p className='text-red-500'>{error}</p>}
+        {state.message && !state.success && (
+          <p className='text-red-500'>{state.message}</p>
+        )}
         <Button text='Login' />
       </form>
     </div>
