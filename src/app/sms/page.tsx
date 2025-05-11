@@ -5,6 +5,14 @@ import { logout } from '../actions'
 import Input from '@/src/components/input'
 import Button from '@/src/components/button'
 
+interface LoginResult {
+  message: string
+  success?: boolean
+  errors?: {
+    server?: string[]
+  }
+}
+
 export default function SMSLoginPage () {
   const [phone, setPhone] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -26,20 +34,27 @@ export default function SMSLoginPage () {
     fetchSession()
   }, [])
 
-  const handleSubmit = async (formData: FormData) => {
+  const handleSubmit = async (formData: FormData): Promise<void> => {
     try {
       const response = await fetch('/api/sms-login', {
         method: 'POST',
         body: formData
       })
-      if (!response.ok) {
-        setError('Login failed. Please try again.')
+      const data: LoginResult = await response.json() // API 응답 파싱
+      if (!response.ok || !data.success) {
+        setError(data.message || 'Login failed. Please try again.')
         return
       }
       window.location.href = '/profile'
     } catch {
       setError('Server error. Please try again.')
     }
+  }
+
+  const onSubmit: React.FormEventHandler<HTMLFormElement> = async event => {
+    event.preventDefault() // 기본 폼 제출 동작 방지
+    const formData = new FormData(event.currentTarget)
+    await handleSubmit(formData)
   }
 
   return (
@@ -56,7 +71,7 @@ export default function SMSLoginPage () {
       )}
       <h1 className='text-2xl font-bold'>SMS Login</h1>
       <form
-        action={handleSubmit}
+        onSubmit={onSubmit}
         className='mt-4 flex flex-col gap-3 max-w-lg mx-auto'
       >
         <Input
