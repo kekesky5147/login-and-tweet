@@ -61,7 +61,7 @@ const ChangePasswordFormSchema = z.object({
     .min(5, "New password must be at least 5 characters")
     .regex(
       /^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])[A-Za-z0-9!@#$%^&*]{5,}$/,
-      "New password must contain at least one uppercase letter, one number, and one special character"
+      "Password must contain at least one uppercase letter, one number, and one special character"
     ),
 })
 
@@ -169,6 +169,17 @@ export async function createAccount(
   const { email, password, username, phone } = validatedFields.data
 
   try {
+    console.log("Checking Prisma initialization...")
+    const prismaVersion = require("@prisma/client/package.json").version
+    console.log("Prisma Client version:", prismaVersion)
+    console.log("NODE_ENV:", process.env.NODE_ENV)
+    console.log("DATABASE_URL set:", !!process.env.DATABASE_URL)
+
+    // 데이터베이스 연결 테스트
+    console.log("Testing database connection...")
+    await prisma.$connect()
+    console.log("Database connection successful")
+
     console.log("Checking existing user...")
     const [existingEmail, existingUsername, existingPhone] = await Promise.all([
       prisma.user.findUnique({
@@ -272,6 +283,9 @@ export async function createAccount(
       message: errorMessage,
       stack: error instanceof Error ? error.stack : undefined,
       input: { email, username, phone, password: "***" },
+      prismaVersion: require("@prisma/client/package.json").version,
+      nodeEnv: process.env.NODE_ENV,
+      databaseUrl: process.env.DATABASE_URL ? "Set" : "Not set",
     })
 
     if (error instanceof Error) {
@@ -332,12 +346,24 @@ export async function createAccount(
           message: "Password hashing error. Please try again.",
         }
       }
+      if (error.message.includes("PrismaClient")) {
+        return {
+          errors: {
+            server: [
+              "Prisma Client error. Please check database configuration.",
+            ],
+          },
+          message: "Prisma Client error. Please check database configuration.",
+        }
+      }
     }
 
     return {
       errors: { server: [errorMessage] },
       message: errorMessage,
     }
+  } finally {
+    await prisma.$disconnect()
   }
 }
 
