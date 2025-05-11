@@ -170,20 +170,22 @@ export async function createAccount(
 
   try {
     console.log("Checking existing user...")
-    const existingEmail = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true, email: true },
-    })
-    const existingUsername = await prisma.user.findUnique({
-      where: { username },
-      select: { id: true, username: true },
-    })
-    const existingPhone = phone
-      ? await prisma.user.findUnique({
-          where: { phone },
-          select: { id: true, phone: true },
-        })
-      : null
+    const [existingEmail, existingUsername, existingPhone] = await Promise.all([
+      prisma.user.findUnique({
+        where: { email },
+        select: { id: true, email: true },
+      }),
+      prisma.user.findUnique({
+        where: { username },
+        select: { id: true, username: true },
+      }),
+      phone
+        ? prisma.user.findUnique({
+            where: { phone },
+            select: { id: true, phone: true },
+          })
+        : Promise.resolve(null),
+    ])
 
     console.log(
       "Existing email:",
@@ -250,7 +252,7 @@ export async function createAccount(
       path: "/",
       sameSite: "strict",
     })
-    console.log("Session set:", { userId: user.id, session: sessionData })
+    console.log("Session set:", { userId: user.id })
 
     revalidatePath("/create-account")
     revalidatePath("/login")
@@ -262,39 +264,76 @@ export async function createAccount(
       success: true,
     }
   } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Failed to create account. Please try again."
     console.error("CreateAccount error:", {
-      message: error instanceof Error ? error.message : "Unknown error",
+      message: errorMessage,
       stack: error instanceof Error ? error.stack : undefined,
       input: { email, username, phone, password: "***" },
     })
-    let errorMessage = "Failed to create account. Please try again."
+
     if (error instanceof Error) {
       if (
         error.message.includes("database") ||
         error.message.includes("connect")
       ) {
-        errorMessage = "Database connection error. Please try again later."
-      } else if (
+        return {
+          errors: {
+            server: ["Database connection error. Please try again later."],
+          },
+          message: "Database connection error. Please try again later.",
+        }
+      }
+      if (
         error.message.includes("constraint") ||
         error.message.includes("unique")
       ) {
         if (error.message.includes("nickname")) {
-          errorMessage =
-            "Database schema error: nickname field detected. Please update schema."
-        } else if (error.message.includes("email")) {
-          errorMessage = "Email already exists in database."
-        } else if (error.message.includes("username")) {
-          errorMessage = "Username already exists in database."
-        } else if (error.message.includes("phone")) {
-          errorMessage = "Phone number already exists in database."
-        } else {
-          errorMessage =
-            "Database constraint violation. Check your input fields."
+          return {
+            errors: {
+              server: [
+                "Database schema error: nickname field detected. Please update schema.",
+              ],
+            },
+            message:
+              "Database schema error: nickname field detected. Please update schema.",
+          }
         }
-      } else if (error.message.includes("bcrypt")) {
-        errorMessage = "Password hashing error. Please try again."
+        if (error.message.includes("email")) {
+          return {
+            errors: { email: ["Email already exists in database."] },
+            message: "Email already exists in database.",
+          }
+        }
+        if (error.message.includes("username")) {
+          return {
+            errors: { username: ["Username already exists in database."] },
+            message: "Username already exists in database.",
+          }
+        }
+        if (error.message.includes("phone")) {
+          return {
+            errors: { phone: ["Phone number already exists in database."] },
+            message: "Phone number already exists in database.",
+          }
+        }
+        return {
+          errors: {
+            server: ["Database constraint violation. Check your input fields."],
+          },
+          message: "Database constraint violation. Check your input fields.",
+        }
+      }
+      if (error.message.includes("bcrypt")) {
+        return {
+          errors: { server: ["Password hashing error. Please try again."] },
+          message: "Password hashing error. Please try again.",
+        }
       }
     }
+
     return {
       errors: { server: [errorMessage] },
       message: errorMessage,
