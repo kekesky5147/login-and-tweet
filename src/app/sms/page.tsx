@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useFormState } from 'react-dom'
-import { smsLogin, logout } from '../actions'
+import { smsLogin, logout } from './actions'
 import Input from '@/src/components/input'
 import Button from '@/src/components/button'
 
@@ -70,7 +70,6 @@ export default function SMSLoginPage () {
         </div>
       )}
       <h1 className='text-2xl font-bold'>SMS Login</h1>
-      )T
       <form
         action={formAction}
         className='mt-4 flex flex-col gap-3 max-w-lg mx-auto'

@@ -85,6 +85,7 @@ interface LoginResult {
   errors?: {
     email?: string[]
     password?: string[]
+    phone?: string[]
     server?: string[]
   }
 }
@@ -674,7 +675,7 @@ export async function updateUserProfile(
     bio: formData.get("bio")?.toString() || null,
   }
 
-  console.log("UpdateProfile input:", { ...data, password: "***" })
+  console.log("UpdateProfile input:", { ...data })
 
   const validatedFields = UpdateProfileFormSchema.safeParse(data)
   console.log(
@@ -716,8 +717,9 @@ export async function updateUserProfile(
     )
 
     const errors: { email?: string[]; username?: string[] } = {}
-    if (existingEmail) errors.email = ["Email already in use"]
-    if (existingUsername) errors.username = ["Username already in use"]
+    if (existingEmail?.email) errors.email = ["Email already in use"]
+    if (existingUsername?.username)
+      errors.username = ["Username already in use"]
 
     if (Object.keys(errors).length > 0) {
       return {
@@ -767,13 +769,17 @@ export async function updateUserProfile(
       success: true,
     }
   } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Failed to update profile. Please try again."
     console.error("UpdateProfile error:", {
-      message: error instanceof Error ? error.message : "Unknown error",
+      message: errorMessage,
       stack: error instanceof Error ? error.stack : undefined,
       input: { email, username, bio },
     })
     return {
-      errors: { server: ["Failed to update profile. Please try again."] },
+      errors: { server: [errorMessage] },
       message: "Server error occurred.",
     }
   }
@@ -963,5 +969,80 @@ export async function getTweets() {
   } catch (error) {
     console.error("GetTweets error:", error)
     return []
+  }
+}
+
+export async function smsLogin(
+  prevState: LoginResult,
+  formData: FormData
+): Promise<LoginResult> {
+  noStore()
+  const phone = formData.get("phone")?.toString() || ""
+
+  console.log("SMSLogin input:", { phone })
+
+  // 간단한 전화번호 유효성 검사
+  const phoneSchema = z
+    .string()
+    .regex(/^\d{10,11}$/, "Invalid phone number (e.g., 01012345678)")
+  const validatedFields = phoneSchema.safeParse(phone)
+
+  if (!validatedFields.success) {
+    const fieldErrors = validatedFields.error?.flatten().fieldErrors as
+      | {
+          phone?: string[]
+        }
+      | undefined
+    return {
+      message: "Invalid phone number.",
+      errors: { phone: fieldErrors?.phone || ["Invalid phone number format"] },
+    }
+  }
+
+  try {
+    console.log("Fetching user by phone...")
+    const user = await prisma.user.findUnique({
+      where: { phone },
+      select: { id: true, email: true, username: true },
+    })
+    console.log("User found:", user ? { id: user.id, phone } : null)
+
+    if (!user) {
+      return {
+        message: "Phone number not registered.",
+        errors: { phone: ["Phone number not found"] },
+      }
+    }
+
+    console.log("Setting session cookie...")
+    const sessionData = JSON.stringify({
+      userId: user.id,
+      email: user.email,
+      username: user.username,
+    } as UserSession)
+    cookies().set("session", sessionData, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60,
+      path: "/",
+      sameSite: "strict",
+    })
+    console.log("Session set:", { userId: user.id, session: sessionData })
+
+    revalidatePath("/tweet")
+    revalidatePath(`/profile/${user.id}`)
+    revalidatePath(`/users/${user.username}`)
+
+    return {
+      message: "SMS Login successful!",
+      userId: user.id,
+      success: true,
+    }
+  } catch (error) {
+    console.error("SMSLogin error:", error)
+    return {
+      message: "Server error occurred.",
+      errors: { server: ["Failed to login. Please try again."] },
+    }
   }
 }
